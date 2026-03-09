@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="camera_bg">#0A0A0A</color>
+    <color name="settings_bg">#111111</color>
+    <color name="surface">#1C1C1C</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_primary">#F0F0F0</color>
+    <color name="text_secondary">#888888</color>
+    <color name="accent_yellow">#FFD600</color>
+    <color name="accent_green">#00E676</color>
+    <color name="accent_blue">#448AFF</color>
+    <color name="capture_button">#FFFFFF</color>
+    <color name="record_red">#F44336</color>
+</resources>

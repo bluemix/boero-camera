@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/settings_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="32dp">
+
+        <!-- ── IMAGE FORMAT ───────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="IMAGE FORMAT" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="All photos are saved as WebP"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="Lossless WebP" android:textColor="@color/text_primary" android:textSize="15sp" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="Larger files, perfect quality" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                </LinearLayout>
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchLosslessWebp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvWebpQualityLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Quality: 90"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/sliderWebpQuality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:valueFrom="50"
+                android:valueTo="100"
+                android:value="90"
+                android:stepSize="1" />
+
+        </LinearLayout>
+
+        <!-- ── PHOTO RESOLUTION ─────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="PHOTO RESOLUTION" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Capture resolution (overrides aspect ratio crop)"
+                android:textColor="@color/text_secondary" android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+            <Spinner android:id="@+id/spinnerPhotoResolution"
+                android:layout_width="match_parent"
+                android:layout_height="48dp" />
+        </LinearLayout>
+
+        <!-- ── ASPECT RATIO ───────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="ASPECT RATIO" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="horizontal">
+            <Button android:id="@+id/btnAspect43"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="4:3"
+                style="@style/AspectButton" android:layout_marginEnd="8dp" />
+            <Button android:id="@+id/btnAspect169"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="16:9"
+                style="@style/AspectButton" />
+        </LinearLayout>
+
+        <!-- ── VIDEO ─────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="VIDEO" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+
+            <!-- AV1 toggle -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="AV1 Hardware Encoding" android:textColor="@color/text_primary" android:textSize="15sp" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="~40% smaller than H.264" android:textColor="@color/accent_green" android:textSize="12sp" />
+                </LinearLayout>
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchAv1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvAv1Status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Checking..."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:background="@drawable/bg_code_block"
+                android:padding="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvAv1Note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <!-- Video quality -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Resolution" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginTop="16dp" android:layout_marginBottom="4dp" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupVideoQuality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <!-- Storage Paths -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Photo Save Folder" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginBottom="4dp" />
+            <EditText android:id="@+id/etPhotoPath"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="text" android:singleLine="true"
+                android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary"
+                android:hint="DCIM/Camera"
+                android:background="@drawable/bg_code_block" android:padding="10dp"
+                android:fontFamily="monospace" android:textSize="13sp"
+                android:layout_marginBottom="12dp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Video Save Folder" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginBottom="4dp" />
+            <EditText android:id="@+id/etVideoPath"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="text" android:singleLine="true"
+                android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary"
+                android:hint="DCIM/Camera"
+                android:background="@drawable/bg_code_block" android:padding="10dp"
+                android:fontFamily="monospace" android:textSize="13sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Frame Rate -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Frame Rate" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginTop="16dp" android:layout_marginBottom="4dp" />
+            <RadioGroup
+                android:id="@+id/radioGroupFps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <!-- AV1 Bitrate (shown only when AV1 is on) -->
+            <LinearLayout
+                android:id="@+id/layoutAv1Bitrate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp">
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="AV1 Bitrate" android:textColor="@color/text_primary"
+                        android:textSize="15sp" />
+                    <TextView android:id="@+id/tvAv1BitrateValue"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="5 Mbps" android:textColor="@color/accent_blue"
+                        android:textSize="14sp" android:textStyle="bold" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/seekAv1Bitrate"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:max="9"
+                    android:progress="3"
+                    android:layout_marginTop="4dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                        android:layout_weight="1" android:text="2 Mbps" android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="40 Mbps" android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- ── EXPOSURE ───────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="EXPOSURE" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+
+            <!-- HDR -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="HDR Mode"
+                    android:textColor="@color/text_primary" android:textSize="15sp" />
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchHdr"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- Night mode -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Night Mode"
+                    android:textColor="@color/text_primary" android:textSize="15sp" />
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchNightMode"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- Exposure compensation -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Exposure Compensation" android:textColor="@color/text_primary" android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tvExposureCompLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="EV: +0"
+                android:textColor="@color/accent_yellow"
+                android:textSize="13sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/sliderExposureComp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:valueFrom="-3"
+                android:valueTo="3"
+                android:value="0"
+                android:stepSize="1" />
+
+            <!-- ISO -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="ISO" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginTop="12dp" android:layout_marginBottom="4dp" />
+
+            <Spinner android:id="@+id/spinnerIso"
+                android:layout_width="match_parent" android:layout_height="48dp" />
+
+            <!-- Shutter speed -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Shutter Speed" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginTop="12dp" android:layout_marginBottom="4dp" />
+
+            <Spinner android:id="@+id/spinnerShutter"
+                android:layout_width="match_parent" android:layout_height="48dp" />
+
+        </LinearLayout>
+
+        <!-- ── FOCUS ──────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="FOCUS" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Focus Mode" android:textColor="@color/text_primary"
+                android:textSize="15sp" android:layout_marginBottom="4dp" />
+            <Spinner android:id="@+id/spinnerFocusMode"
+                android:layout_width="match_parent" android:layout_height="48dp" />
+        </LinearLayout>
+
+        <!-- ── RESET ──────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="DANGER ZONE" />
+
+        <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Wipe all saved settings and restart with defaults."
+                android:textColor="@color/text_secondary" android:textSize="13sp"
+                android:layout_marginBottom="12dp" />
+            <Button android:id="@+id/btnResetSettings"
+                android:layout_width="match_parent" android:layout_height="48dp"
+                android:text="RESET ALL SETTINGS"
+                android:backgroundTint="#C62828"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- ── OK / CANCEL ──────────────────────────────── -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="#33FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="32dp">
+
+            <Button
+                android:id="@+id/btnSettingsCancel"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="✕  CANCEL"
+                android:textSize="14sp"
+                android:backgroundTint="@color/surface"
+                android:textColor="@color/text_primary" />
+
+            <Button
+                android:id="@+id/btnSettingsOk"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="✓  SAVE"
+                android:textSize="14sp"
+                android:backgroundTint="@color/accent_blue"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

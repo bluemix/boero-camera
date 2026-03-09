@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/camera_bg">
+
+    <!-- Camera Preview -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/viewFinder"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomControls"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:scaleType="fillCenter" />
+
+    <!-- Shutter flash overlay -->
+    <View
+        android:id="@+id/shutterFlash"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="#B3000000"
+        android:alpha="0.7"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/viewFinder"
+        app:layout_constraintBottom_toBottomOf="@id/viewFinder"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Focus ring -->
+    <View
+        android:id="@+id/focusRing"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:background="@drawable/focus_ring"
+        android:visibility="gone"
+        android:pointerIcon="crosshair"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Top bar -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnFlash"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_flash_auto"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/tvZoom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="1.0x"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
+
+        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+        <!-- HDR badge -->
+        <TextView
+            android:id="@+id/badgeHdr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="HDR"
+            android:textColor="@color/accent_yellow"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- AV1 badge -->
+        <TextView
+            android:id="@+id/badgeAv1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="AV1"
+            android:textColor="@color/accent_green"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_settings"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/white" />
+
+    </LinearLayout>
+
+    <!-- Zoom quick buttons -->
+    <LinearLayout
+        android:id="@+id/zoomButtons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_pill_dark"
+        android:padding="4dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomControls"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/btnZoomUw"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text=".6×"
+            android:textSize="12sp"
+            style="@style/ZoomButton" />
+
+        <Button
+            android:id="@+id/btnZoom1x"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="1×"
+            android:textSize="12sp"
+            style="@style/ZoomButton" />
+
+        <Button
+            android:id="@+id/btnZoom2x"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="2×"
+            android:textSize="12sp"
+            style="@style/ZoomButton" />
+
+    </LinearLayout>
+
+    <!-- Save indicator: small pill shown briefly after photo/video save -->
+    <LinearLayout
+        android:id="@+id/saveIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="5dp"
+        android:background="@drawable/bg_pill_dark"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp">
+
+        <ProgressBar
+            android:id="@+id/saveSpinner"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="6dp"
+            android:indeterminateTint="@color/accent_blue" />
+
+        <TextView
+            android:id="@+id/tvSaveStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Saving…"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+
+    <!-- Recording duration -->
+    <LinearLayout
+        android:id="@+id/recordingInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <View
+            android:id="@+id/recordingIndicator"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/shape_record_dot"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvRecordingTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- White balance quick row -->
+    <HorizontalScrollView
+        android:id="@+id/wbScrollView"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/zoomButtons"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:gravity="center_vertical">
+
+            <Button android:id="@+id/btnWbAuto"     style="@style/WbButton" android:text="AWB" />
+            <Button android:id="@+id/btnWbDaylight" style="@style/WbButton" android:text="☀" />
+            <Button android:id="@+id/btnWbCloudy"   style="@style/WbButton" android:text="☁" />
+            <Button android:id="@+id/btnWbTungsten" style="@style/WbButton" android:text="💡" />
+
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Exposure slider -->
+    <com.google.android.material.slider.Slider
+        android:id="@+id/sliderExposure"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="32dp"
+        android:layout_marginBottom="4dp"
+        android:valueFrom="-3"
+        android:valueTo="3"
+        android:value="0"
+        android:stepSize="1"
+        app:layout_constraintBottom_toTopOf="@id/wbScrollView"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Exposure label -->
+    <TextView
+        android:id="@+id/tvExposure"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="+0"
+        android:textColor="@color/accent_yellow"
+        android:textSize="11sp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/sliderExposure" />
+
+    <!-- Bottom controls -->
+    <LinearLayout
+        android:id="@+id/bottomControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/camera_bg"
+        android:paddingBottom="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Mode tabs -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnPhotoMode"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:text="PHOTO"
+                style="@style/ModeButton" />
+
+            <Button
+                android:id="@+id/btnVideoMode"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:text="VIDEO"
+                style="@style/ModeButton" />
+
+        </LinearLayout>
+
+        <!-- Capture row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="32dp">
+
+            <!-- Thumbnail placeholder -->
+            <ImageView
+                android:id="@+id/ivThumbnail"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:scaleType="centerCrop"
+                android:background="@drawable/bg_thumbnail"
+                android:contentDescription="Last photo" />
+
+            <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+            <!-- Capture button -->
+            <ImageButton
+                android:id="@+id/btnCapture"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:src="@drawable/ic_capture_photo"
+                android:background="@drawable/bg_capture_button"
+                android:contentDescription="Capture" />
+
+            <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+            <!-- Flip camera -->
+            <ImageButton
+                android:id="@+id/btnFlipCamera"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_flip_camera"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/white" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

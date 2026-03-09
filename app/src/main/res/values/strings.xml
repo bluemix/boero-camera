@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Boero Camera</string>
+    <string name="permission_denied">Camera permissions are required to use this app.</string>
+    <string name="saved_photo">Photo saved</string>
+    <string name="saved_video">Video saved</string>
+    <string name="capture_failed">Capture failed. Please try again.</string>
+    <string name="av1_not_available">Hardware AV1 encoder not available on this device</string>
+</resources>

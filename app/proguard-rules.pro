@@ -1,0 +1,3 @@
+-keep class com.pixelshift.camera.** { *; }
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
