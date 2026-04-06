@@ -275,7 +275,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:background="@color/camera_bg"
-        android:paddingBottom="32dp"
+        android:paddingBottom="64dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">

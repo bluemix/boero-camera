@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="camera_bg">#F5F5F5</color>
+    <color name="camera_bg">#0A0A0A</color>
     <color name="settings_bg">#FFFFFF</color>
     <color name="surface">#FAFAFA</color>
     <color name="white">#FFFFFF</color>
