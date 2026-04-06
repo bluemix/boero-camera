@@ -15,8 +15,8 @@
     <style name="Theme.BoeroCamera.Light" parent="Theme.MaterialComponents.Light">
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">@color/white</item>
-        <item name="colorPrimary">@color/purple_500</item>
-        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <item name="colorPrimary">@color/accent_blue</item>
+        <item name="colorPrimaryVariant">@color/accent_blue</item>
         <item name="colorOnPrimary">@color/white</item>
     </style>
 
