@@ -2,7 +2,7 @@
 <resources>
     <color name="camera_bg">#F5F5F5</color>
     <color name="settings_bg">#FFFFFF</color>
-    <color name="surface">#E8E8E8</color>
+    <color name="surface">#FAFAFA</color>
     <color name="white">#FFFFFF</color>
     <color name="text_primary">#1A1A1A</color>
     <color name="text_secondary">#666666</color>
