@@ -100,9 +100,31 @@ jobs:
               -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
               -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload release APK
-        uses: actions/upload-artifact@v4
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(./gradlew -q printVersionName 2>/dev/null || echo "1.0.${{ github.run_number }}")
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+ 
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: boero-camera-release-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          tag_name: v${{ steps.version.outputs.name }}-${{ github.run_number }}
+          release_name: Release v${{ steps.version.outputs.name }}-${{ github.run_number }}
+          body: |
+            Automated release from commit ${{ github.sha }}
+          draft: false
+          prerelease: false
+ 
+      - name: Upload APK to GitHub Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-release.apk
+          asset_name: boero-camera-${{ github.run_number }}.apk
+          asset_content_type: application/vnd.android.package-archive
