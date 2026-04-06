@@ -11,6 +11,16 @@
         <item name="colorControlHighlight">#33FFFFFF</item>
     </style>
 
+
+    <style name="Theme.BoeroCamera.Light" parent="Theme.MaterialComponents.Light">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/white</item>
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <item name="colorOnPrimary">@color/white</item>
+    </style>
+
+
     <style name="Theme.BoeroCamera.ActionBar" parent="Theme.BoeroCamera">
         <item name="windowActionBar">true</item>
         <item name="windowNoTitle">false</item>
