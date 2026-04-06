@@ -93,12 +93,12 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $GITHUB_WORKSPACE/release.keystore
 
       - name: Build release APK
-        run: ./gradlew assembleRelease --stacktrace
-        env:
-          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          SIGNING_STORE_FILE: ${{ github.workspace }}/release.keystore
+        run: |
+            ./gradlew assembleRelease --stacktrace \
+              -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
+              -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+              -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+              -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
