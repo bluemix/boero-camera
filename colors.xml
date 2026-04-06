@@ -1,0 +1,5 @@
+<resources>
+    <!-- App colors -->
+    <color name="background_color">#FFFFFF</color> <!-- Light mode background -->
+    <color name="text_color">#000000</color> <!-- Light mode text -->
+</resources>

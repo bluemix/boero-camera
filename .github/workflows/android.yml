@@ -1,5 +1,6 @@
-name: Android CI
 
+
+name: Android CI
 on:
   push:
     branches: [ "main" ]
@@ -48,6 +49,12 @@ jobs:
           name: boero-camera-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+      
+      - name: Print release condition value
+        run: |
+          echo "event_name : ${{ github.event_name }}"
+          echo "ref        : ${{ github.ref }}"
+          echo "SIGN_RELEASE: ${{ vars.SIGN_RELEASE }}"
 
   release:
     name: Build Release APK
@@ -57,6 +64,7 @@ jobs:
     needs: build
 
     steps:
+    
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -85,16 +93,38 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $GITHUB_WORKSPACE/release.keystore
 
       - name: Build release APK
-        run: ./gradlew assembleRelease --stacktrace
-        env:
-          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          SIGNING_STORE_FILE: ${{ github.workspace }}/release.keystore
+        run: |
+            ./gradlew assembleRelease --stacktrace \
+              -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
+              -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+              -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+              -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload release APK
-        uses: actions/upload-artifact@v4
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(./gradlew -q printVersionName 2>/dev/null || echo "1.0.${{ github.run_number }}")
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+ 
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: boero-camera-release-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          tag_name: v${{ steps.version.outputs.name }}-${{ github.run_number }}
+          release_name: Release v${{ steps.version.outputs.name }}-${{ github.run_number }}
+          body: |
+            Automated release from commit ${{ github.sha }}
+          draft: false
+          prerelease: false
+ 
+      - name: Upload APK to GitHub Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-release.apk
+          asset_name: boero-camera-${{ github.run_number }}.apk
+          asset_content_type: application/vnd.android.package-archive
