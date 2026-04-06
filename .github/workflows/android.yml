@@ -1,5 +1,6 @@
-name: Android CI
 
+
+name: Android CI
 on:
   push:
     branches: [ "main" ]
@@ -48,6 +49,12 @@ jobs:
           name: boero-camera-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+      
+      - name: Print release condition value
+        run: |
+          echo "event_name : ${{ github.event_name }}"
+          echo "ref        : ${{ github.ref }}"
+          echo "SIGN_RELEASE: ${{ vars.SIGN_RELEASE }}"
 
   release:
     name: Build Release APK
@@ -57,6 +64,7 @@ jobs:
     needs: build
 
     steps:
+    
       - name: Checkout source
         uses: actions/checkout@v4
 
