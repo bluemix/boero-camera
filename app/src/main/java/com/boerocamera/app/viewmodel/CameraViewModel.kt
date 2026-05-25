@@ -38,7 +38,7 @@ enum class FocusMode { AUTO, MANUAL, CONTINUOUS, MACRO }
 enum class WhiteBalance { AUTO, DAYLIGHT, CLOUDY, SHADE, TUNGSTEN, FLUORESCENT }
 
 data class CameraState(
-    val mode: CameraMode = CameraMode.PHOTO,
+    val mode: CameraMode = CameraMode.VIDEO,
     val isRecording: Boolean = false,
     val isFrontCamera: Boolean = false,
     val flashMode: FlashMode = FlashMode.AUTO,
@@ -117,7 +117,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         com.boerocamera.app.utils.CameraPreferences.save(context, st)
     }
 
-    // ─── AV1 Detection ───────────────────────────────────────────────────────
+    // ─── AV1 Detection ────────────────────────────────────────────────────────
 
     private fun checkAv1Support() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -142,7 +142,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── State Updates ───────────────────────────────────────────────────────
+    // ─── State Updates ────────────────────────────────────────────────────────
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -219,7 +219,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _onCameraReady?.invoke()
     }
 
-    // ─── Flash ───────────────────────────────────────────────────────────────
+    // ─── Flash ──────────────────────────────────────────────────────────────
 
     private fun applyFlashToCapture(flash: FlashMode) {
         imageCapture?.flashMode = when (flash) {
@@ -235,7 +235,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── White Balance ───────────────────────────────────────────────────────
+    // ─── White Balance ────────────────────────────────────────────────────────
 
     private fun applyWhiteBalance(wb: WhiteBalance) {
         val cam = camera ?: return
@@ -306,7 +306,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── Focus ────────────────────────────────────────────────────────────────
+    // ─── Focus ──────────────────────────────────────────────────────────────
 
     fun tapToFocus(meteringPoint: MeteringPoint) {
         val action = FocusMeteringAction.Builder(meteringPoint)
@@ -319,7 +319,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         camera?.cameraControl?.cancelFocusAndMetering()
     }
 
-    // ─── Photo Capture ───────────────────────────────────────────────────────
+    // ─── Photo Capture ────────────────────────────────────────────────────────
 
     fun takePhoto(context: Context, onDone: (Boolean, String?) -> Unit) {
         val ic = imageCapture ?: run { onDone(false, "Camera not ready"); return }
@@ -363,7 +363,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         })
     }
 
-    // ─── Video Recording ─────────────────────────────────────────────────────
+    // ─── Video Recording ────────────────────────────────────────────────────
 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
     fun startRecording(context: Context, onEvent: (VideoRecordEvent) -> Unit) {
