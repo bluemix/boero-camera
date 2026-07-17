@@ -7,6 +7,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
+import android.os.PowerManager
 import android.provider.MediaStore
 import android.util.Log
 import android.util.Range
@@ -20,6 +21,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.camera.video.VideoCapture
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -84,6 +86,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     var av1EncoderPreview: Preview? = null    // second Preview whose surface feeds the codec
     var av1Rotation: Int = 0                  // sensor rotation passed in from MainActivity
     private var timerJob: kotlinx.coroutines.Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -117,7 +120,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         com.boerocamera.app.utils.CameraPreferences.save(context, st)
     }
 
-    // ─── AV1 Detection ────────────────────────────────────────────────────────
+    // ─── AV1 Detection ────────────────────────────────────────────────────────[...]
 
     private fun checkAv1Support() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -142,7 +145,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── State Updates ────────────────────────────────────────────────────────
+    // ─── State Updates ────────────────────────────────────────────────────────[...]
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -219,7 +222,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _onCameraReady?.invoke()
     }
 
-    // ─── Flash ──────────────────────────────────────────────────────────────
+    // ─── Flash ───────────────────────────────────────────────────────────[...]
 
     private fun applyFlashToCapture(flash: FlashMode) {
         imageCapture?.flashMode = when (flash) {
@@ -235,7 +238,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── White Balance ────────────────────────────────────────────────────────
+    // ─── White Balance ────────────────────────────────────────────────────────[...]
 
     private fun applyWhiteBalance(wb: WhiteBalance) {
         val cam = camera ?: return
@@ -306,7 +309,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── Focus ──────────────────────────────────────────────────────────────
+    // ─── Focus ───────────────────────────────────────────────────────────[...]
 
     fun tapToFocus(meteringPoint: MeteringPoint) {
         val action = FocusMeteringAction.Builder(meteringPoint)
@@ -319,7 +322,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         camera?.cameraControl?.cancelFocusAndMetering()
     }
 
-    // ─── Photo Capture ────────────────────────────────────────────────────────
+    // ─── Photo Capture ────────────────────────────────────────────────────────[...]
 
     fun takePhoto(context: Context, onDone: (Boolean, String?) -> Unit) {
         val ic = imageCapture ?: run { onDone(false, "Camera not ready"); return }
@@ -368,6 +371,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
     fun startRecording(context: Context, onEvent: (VideoRecordEvent) -> Unit) {
         val st = _state.value ?: CameraState()
+
+        // Acquire wake lock to keep screen on during recording
+        if (wakeLock == null) {
+            val powerManager = context.getSystemService<PowerManager>()
+            wakeLock = powerManager?.newWakeLock(
+                PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,
+                "BoeroCamera::recording"
+            )?.apply { acquire() }
+            Log.i(TAG, "Wake lock acquired for recording")
+        }
 
         if (st.useAv1 && st.av1Available && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startAv1Recording(context)
@@ -488,6 +501,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun stopRecording(context: Context? = null) {
+        // Release wake lock when recording stops
+        wakeLock?.release()
+        wakeLock = null
+        Log.i(TAG, "Wake lock released")
+
         if (av1Session != null && context != null) {
             stopAv1Recording(context)
         } else {
@@ -530,5 +548,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         super.onCleared()
         cameraExecutor.shutdown()
+        // Ensure wake lock is released if app is closed while recording
+        wakeLock?.release()
+        wakeLock = null
     }
 }
