@@ -42,6 +42,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_SHUTTER       = "shutter"
         const val KEY_EXPOSURE_COMP = "exposure_comp"
         const val KEY_PHOTO_RES     = "photo_resolution"  // e.g. "4080x3060"
+        const val KEY_FULLSCREEN_BRIGHTNESS = "fullscreen_brightness_recording" // toggle for keeping brightness at full during recording
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +66,7 @@ class SettingsActivity : AppCompatActivity() {
         setupFps()
         setupFocusMode()
         setupExposure()
+        setupRecordingBrightness()
         setupResetButton()
         setupOkCancel()
     }
@@ -360,6 +362,13 @@ class SettingsActivity : AppCompatActivity() {
             rb.setOnCheckedChangeListener { _, checked ->
                 if (checked) prefs.edit().putInt(KEY_FRAME_RATE, fps).apply()
             }
+        }
+    }
+
+    private fun setupRecordingBrightness() {
+        binding.switchFullscreenBrightness.isChecked = prefs.getBoolean(KEY_FULLSCREEN_BRIGHTNESS, true)
+        binding.switchFullscreenBrightness.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean(KEY_FULLSCREEN_BRIGHTNESS, checked).apply()
         }
     }
 

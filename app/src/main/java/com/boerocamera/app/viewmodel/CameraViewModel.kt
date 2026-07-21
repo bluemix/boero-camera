@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import android.util.Log
 import android.util.Range
 import android.view.Surface
+import android.view.WindowManager
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.*
@@ -63,7 +64,8 @@ data class CameraState(
     val webpQuality: Int = 90,            // 0-100
     val losslessWebP: Boolean = false,
     val recordingDuration: Long = 0L,
-    val captureStatus: String? = null
+    val captureStatus: String? = null,
+    val fullscreenBrightness: Boolean = true  // keep full brightness during recording
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -87,6 +89,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     var av1Rotation: Int = 0                  // sensor rotation passed in from MainActivity
     private var timerJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var windowManager: WindowManager? = null
+    private var originalBrightness: Float = -1f  // store original brightness
 
     val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -120,7 +124,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         com.boerocamera.app.utils.CameraPreferences.save(context, st)
     }
 
-    // ─── AV1 Detection ────────────────────────────────────────────────────────[...]
+    // ─── AV1 Detection ──────────────────────────────────────────────────────
 
     private fun checkAv1Support() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -145,7 +149,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── State Updates ────────────────────────────────────────────────────────[...]
+    // ─── State Updates ──────────────────────────────────────────────────────
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -208,6 +212,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setLosslessWebP(lossless: Boolean) = updateState { copy(losslessWebP = lossless) }
 
+    fun setFullscreenBrightness(enabled: Boolean) = updateState { copy(fullscreenBrightness = enabled) }
+
     fun onCameraInitialized(cam: Camera) {
         camera = cam
         val zoomState = cam.cameraInfo.zoomState.value
@@ -222,7 +228,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _onCameraReady?.invoke()
     }
 
-    // ─── Flash ───────────────────────────────────────────────────────────[...]
+    // ─── Flash ─────────────────────────────────────────────────────────
 
     private fun applyFlashToCapture(flash: FlashMode) {
         imageCapture?.flashMode = when (flash) {
@@ -238,7 +244,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── White Balance ────────────────────────────────────────────────────────[...]
+    // ─── White Balance ──────────────────────────────────────────────────────
 
     private fun applyWhiteBalance(wb: WhiteBalance) {
         val cam = camera ?: return
@@ -309,7 +315,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── Focus ───────────────────────────────────────────────────────────[...]
+    // ─── Focus ─────────────────────────────────────────────────────────
 
     fun tapToFocus(meteringPoint: MeteringPoint) {
         val action = FocusMeteringAction.Builder(meteringPoint)
@@ -322,7 +328,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         camera?.cameraControl?.cancelFocusAndMetering()
     }
 
-    // ─── Photo Capture ────────────────────────────────────────────────────────[...]
+    // ─── Photo Capture ──────────────────────────────────────────────────────
 
     fun takePhoto(context: Context, onDone: (Boolean, String?) -> Unit) {
         val ic = imageCapture ?: run { onDone(false, "Camera not ready"); return }
@@ -382,10 +388,48 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             Log.i(TAG, "Wake lock acquired for recording")
         }
 
+        // Set full brightness if enabled
+        if (st.fullscreenBrightness) {
+            setFullBrightness(context)
+        }
+
         if (st.useAv1 && st.av1Available && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startAv1Recording(context)
         } else {
             startCameraXRecording(context, onEvent)
+        }
+    }
+
+    private fun setFullBrightness(context: Context) {
+        try {
+            if (windowManager == null) {
+                windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            }
+            val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
+            val window = activity.window ?: return
+            val params = window.attributes
+            originalBrightness = params.screenBrightness
+            params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            window.attributes = params
+            Log.i(TAG, "Full brightness set for recording")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not set full brightness: ${e.message}")
+        }
+    }
+
+    private fun restoreBrightness(context: Context) {
+        try {
+            if (originalBrightness >= 0f) {
+                val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
+                val window = activity.window ?: return
+                val params = window.attributes
+                params.screenBrightness = originalBrightness
+                window.attributes = params
+                originalBrightness = -1f
+                Log.i(TAG, "Brightness restored after recording")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not restore brightness: ${e.message}")
         }
     }
 
@@ -456,10 +500,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         av1Preview = null
         av1EncoderPreview = null
         updateState { copy(isRecording = false, recordingDuration = 0L) }
+        restoreBrightness(context)
         Log.i(TAG, "AV1 recording stopped")
     }
 
-    // ─── CameraX path (H264/HEVC → MP4) ──────────────────────────────────────
+    // ─── CameraX path (H364/HEVC → MP4) ──────────────��───────────────────────
 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
     private fun startCameraXRecording(context: Context, onEvent: (VideoRecordEvent) -> Unit) {
@@ -493,7 +538,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 when (event) {
                     is VideoRecordEvent.Start    -> updateState { copy(isRecording = true, recordingDuration = 0L) }
                     is VideoRecordEvent.Status   -> updateState { copy(recordingDuration = event.recordingStats.recordedDurationNanos / 1_000_000_000L) }
-                    is VideoRecordEvent.Finalize -> updateState { copy(isRecording = false, recordingDuration = 0L) }
+                    is VideoRecordEvent.Finalize -> {
+                        updateState { copy(isRecording = false, recordingDuration = 0L) }
+                        restoreBrightness(context)
+                    }
                     else -> {}
                 }
                 onEvent(event)
@@ -511,6 +559,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             activeRecording?.stop()
             activeRecording = null
+            if (context != null) {
+                restoreBrightness(context)
+            }
         }
     }
 
