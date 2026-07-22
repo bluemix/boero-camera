@@ -48,6 +48,10 @@ class MainActivity : AppCompatActivity() {
     private var lastBoundFrontCamera: Boolean? = null
     private var lastBoundAv1Mode: Boolean? = null
 
+    // Brightness control for recording
+    private var savedBrightnessValue: Float = -1f
+    private var fullBrightnessDuringRecording: Boolean = false
+
     private val requiredPermissions = buildList {
         add(Manifest.permission.CAMERA)
         add(Manifest.permission.RECORD_AUDIO)
@@ -130,6 +134,8 @@ class MainActivity : AppCompatActivity() {
             else     -> FocusMode.CONTINUOUS
         }
         viewModel.setFocusMode(focus)
+        // Load the fullscreen brightness setting
+        fullBrightnessDuringRecording = p.getBoolean(SettingsActivity.KEY_FULLSCREEN_BRIGHTNESS, true)
     }
 
     private fun showSaveIndicator(message: String, isError: Boolean = false, durationMs: Long = 2500) {
@@ -339,12 +345,16 @@ class MainActivity : AppCompatActivity() {
             CameraMode.VIDEO -> {
                 if (state.isRecording) {
                     showSaveIndicator("Saving…", durationMs = 8000)
+                    // Restore previous brightness when stopping recording
+                    restoreBrightness()
                     viewModel.stopRecording(this)
                     // Rebind so viewfinder SurfaceProvider is restored after AV1 recording
                     binding.root.post {
                         cameraProvider?.let { bindCamera(viewModel.state.value ?: return@post) }
                     }
                 } else {
+                    // Save current brightness and set full brightness if enabled
+                    saveBrightnessAndApplyFull()
                     viewModel.startRecording(this) { event ->
                         if (event is VideoRecordEvent.Finalize) {
                             if (event.hasError())
@@ -355,6 +365,41 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Save the current brightness and apply full brightness if the setting is enabled.
+     */
+    private fun saveBrightnessAndApplyFull() {
+        try {
+            // Save current brightness
+            savedBrightnessValue = window.attributes.screenBrightness
+            
+            // Apply full brightness if the setting is enabled
+            if (fullBrightnessDuringRecording) {
+                val params = window.attributes
+                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+                window.attributes = params
+            }
+        } catch (e: Exception) {
+            Log.e("Boero Camera", "Error setting brightness", e)
+        }
+    }
+
+    /**
+     * Restore the previously saved brightness value.
+     */
+    private fun restoreBrightness() {
+        try {
+            if (savedBrightnessValue >= 0f) {
+                val params = window.attributes
+                params.screenBrightness = savedBrightnessValue
+                window.attributes = params
+                savedBrightnessValue = -1f
+            }
+        } catch (e: Exception) {
+            Log.e("Boero Camera", "Error restoring brightness", e)
         }
     }
 
