@@ -10,6 +10,9 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import java.nio.ByteBuffer
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,7 +46,12 @@ object Av1VideoHelper {
     private const val MIME_OPUS  = "audio/opus"
     private const val MIME_AAC   = MediaFormat.MIMETYPE_AUDIO_AAC
 
-    // ─── Muxer commands ───────────────────────────────────────────────────────
+    private fun timestampFileName(): String {
+        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        return "VID_${sdf.format(Date())}.mp4"
+    }
+
+    // ─── Muxer commands ──────────────────────────────────────────────────────��[...]
 
     private sealed class MuxerCmd {
         data class FormatVideo(val format: MediaFormat) : MuxerCmd()
@@ -52,7 +60,7 @@ object Av1VideoHelper {
         object Stop : MuxerCmd()
     }
 
-    // ─── Encoder probe ────────────────────────────────────────────────────────
+    // ─── Encoder probe ───────────────────────────────────────────────────────[...]
 
     data class EncoderInfo(
         val available: Boolean, val codecName: String?,
@@ -229,7 +237,7 @@ object Av1VideoHelper {
         savePath: String     = "DCIM/Camera"
     ): RecordingSession? {
         return try {
-            val fileName = "VID_${System.currentTimeMillis()}.mp4"
+            val fileName = timestampFileName()
             val cv = ContentValues().apply {
                 put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
@@ -295,7 +303,7 @@ object Av1VideoHelper {
         }
     }
 
-    // ─── Audio builder ────────────────────────────────────────────────────────
+    // ─── Audio builder ──────────────────────────────────────────────────────��[...]
 
     private fun buildAudioEncoder(mime: String): Pair<MediaCodec?, AudioRecord?> {
         return try {
@@ -322,7 +330,7 @@ object Av1VideoHelper {
         }
     }
 
-    // ─── Encode threads ───────────────────────────────────────────────────────
+    // ─── Encode threads ──────────────────────────────────────────────────────�[...]
 
     private fun startVideoDrainThread(session: RecordingSession, codec: MediaCodec) {
         Thread({
