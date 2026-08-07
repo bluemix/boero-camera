@@ -392,12 +392,16 @@ class MainActivity : AppCompatActivity() {
      */
     private fun restoreBrightness() {
         try {
+            // Always clear any full-brightness override even if original was "system default" (-1f)
+            val params = window.attributes
             if (savedBrightnessValue >= 0f) {
-                val params = window.attributes
                 params.screenBrightness = savedBrightnessValue
-                window.attributes = params
-                savedBrightnessValue = -1f
+            } else {
+                // original was system-controlled: clear the per-window override
+                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
+            window.attributes = params
+            savedBrightnessValue = -1f
         } catch (e: Exception) {
             Log.e("Boero Camera", "Error restoring brightness", e)
         }
