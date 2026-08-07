@@ -419,15 +419,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun restoreBrightness(context: Context) {
         try {
+            val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
+            val window = activity.window ?: return
+            val params = window.attributes
             if (originalBrightness >= 0f) {
-                val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
-                val window = activity.window ?: return
-                val params = window.attributes
                 params.screenBrightness = originalBrightness
-                window.attributes = params
-                originalBrightness = -1f
-                Log.i(TAG, "Brightness restored after recording")
+            } else {
+                // originalBrightness == -1f means system default — clear the per-window override
+                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
+            window.attributes = params
+            originalBrightness = -1f
+            Log.i(TAG, "Brightness restored after recording")
         } catch (e: Exception) {
             Log.w(TAG, "Could not restore brightness: ${e.message}")
         }
