@@ -34,7 +34,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
+// Focus is explicitly applied before recording so the encoder does not receive
+// the initial frames while the camera is still driving the lens to focus.
 enum class CameraMode { PHOTO, VIDEO }
 enum class FlashMode { OFF, ON, AUTO, TORCH }
 enum class FocusMode { AUTO, MANUAL, CONTINUOUS, MACRO }
@@ -50,9 +53,9 @@ data class CameraState(
     val zoom: Float = 1.0f,
     val minZoom: Float = 1.0f,
     val maxZoom: Float = 1.0f,
-    val iso: Int? = null,                  // null = auto
-    val shutterSpeed: Long? = null,        // null = auto, nanoseconds
-    val exposureCompensation: Int = 0,     // in steps
+    val iso: Int? = null,
+    val shutterSpeed: Long? = null,
+    val exposureCompensation: Int = 0,
     val exposureCompensationRange: Range<Int> = Range(0, 0),
     val hdrEnabled: Boolean = false,
     val nightModeEnabled: Boolean = false,
@@ -61,549 +64,145 @@ data class CameraState(
     val av1Available: Boolean = false,
     val useAv1: Boolean = false,
     val frameRate: Int = 30,
-    val webpQuality: Int = 90,            // 0-100
+    val webpQuality: Int = 90,
     val losslessWebP: Boolean = false,
     val recordingDuration: Long = 0L,
     val captureStatus: String? = null,
-    val fullscreenBrightness: Boolean = true  // keep full brightness during recording
+    val fullscreenBrightness: Boolean = true
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
-
-    companion object {
-        private const val TAG = "CameraViewModel"
-    }
+    companion object { private const val TAG = "CameraViewModel" }
 
     private val _state = MutableLiveData(CameraState())
     val state: LiveData<CameraState> = _state
-
     var imageCapture: ImageCapture? = null
     var videoCapture: VideoCapture<Recorder>? = null
     var camera: Camera? = null
-
     private var activeRecording: Recording? = null
     private var av1Session: Av1VideoHelper.RecordingSession? = null
     val av1Surface: Surface? get() = av1Session?.inputSurface
-    var av1Preview: Preview? = null          // held so AV1 recording can attach codec surface
-    var av1EncoderPreview: Preview? = null    // second Preview whose surface feeds the codec
-    var av1Rotation: Int = 0                  // sensor rotation passed in from MainActivity
+    var av1Preview: Preview? = null
+    var av1EncoderPreview: Preview? = null
+    var av1Rotation: Int = 0
     private var timerJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var windowManager: WindowManager? = null
-    private var originalBrightness: Float = -1f  // store original brightness
-
+    private var originalBrightness: Float = -1f
     val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var _onCameraReady: (() -> Unit)? = null
 
-    init {
-        checkAv1Support()
-    }
+    init { checkAv1Support() }
 
     fun loadSettings(context: Context) {
         val s = com.boerocamera.app.utils.CameraPreferences.load(context)
-        updateState {
-            copy(
-                flashMode        = s.flashMode,
-                focusMode        = s.focusMode,
-                whiteBalance     = s.whiteBalance,
-                hdrEnabled       = s.hdrEnabled,
-                nightModeEnabled = s.nightModeEnabled,
-                aspectRatio      = s.aspectRatio,
-                videoQuality     = s.videoQuality,
-                useAv1           = s.useAv1,
-                webpQuality      = s.webpQuality,
-                losslessWebP     = s.losslessWebP,
-                exposureCompensation = s.exposureComp
-            )
-        }
+        updateState { copy(flashMode=s.flashMode, focusMode=s.focusMode, whiteBalance=s.whiteBalance,
+            hdrEnabled=s.hdrEnabled, nightModeEnabled=s.nightModeEnabled, aspectRatio=s.aspectRatio,
+            videoQuality=s.videoQuality, useAv1=s.useAv1, webpQuality=s.webpQuality,
+            losslessWebP=s.losslessWebP, exposureCompensation=s.exposureComp) }
     }
+    fun saveSettings(context: Context) { _state.value?.let { com.boerocamera.app.utils.CameraPreferences.save(context, it) } }
 
-    fun saveSettings(context: Context) {
-        val st = _state.value ?: return
-        com.boerocamera.app.utils.CameraPreferences.save(context, st)
-    }
-
-    // ─── AV1 Detection ──────────────────────────────────────────────────────
-
-    private fun checkAv1Support() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val available = isAv1HardwareEncoderAvailable()
-            // Only set av1Available — never touch useAv1 here.
-            // useAv1 is a user preference owned entirely by loadPrefsIntoViewModel().
-            updateState { copy(av1Available = available) }
-            Log.i(TAG, "AV1 hardware encoder available: $available")
-        }
-    }
-
+    private fun checkAv1Support() { viewModelScope.launch(Dispatchers.IO) {
+        val available = isAv1HardwareEncoderAvailable()
+        updateState { copy(av1Available=available) }
+        Log.i(TAG, "AV1 hardware encoder available: $available")
+    } }
     private fun isAv1HardwareEncoderAvailable(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-        val codecList = MediaCodecList(MediaCodecList.ALL_CODECS)
-        return codecList.codecInfos.any { codec ->
-            !codec.isEncoder.not() &&  // is encoder
-            codec.isEncoder &&
-            !codec.isSoftwareOnly &&
-            codec.supportedTypes.any { type ->
-                type.equals(MediaFormat.MIMETYPE_VIDEO_AV1, ignoreCase = true)
+        return MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.any { codec ->
+            codec.isEncoder && !codec.isSoftwareOnly && codec.supportedTypes.any {
+                it.equals(MediaFormat.MIMETYPE_VIDEO_AV1, ignoreCase=true)
             }
         }
     }
-
-    // ─── State Updates ──────────────────────────────────────────────────────
-
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun updateState(update: CameraState.() -> CameraState) {
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            _state.value = (_state.value ?: CameraState()).update()
-        } else {
-            // Dispatch to main thread so the update reads *current* state there,
-            // preventing postValue() races where rapid background updates clobber each other.
-            mainHandler.post {
-                _state.value = (_state.value ?: CameraState()).update()
-            }
-        }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) _state.value = (_state.value ?: CameraState()).update()
+        else mainHandler.post { _state.value = (_state.value ?: CameraState()).update() }
     }
+    fun setMode(mode: CameraMode) = updateState { copy(mode=mode) }
+    fun flipCamera() = updateState { copy(isFrontCamera=!isFrontCamera) }
+    fun setFlashMode(flash: FlashMode) { updateState { copy(flashMode=flash) }; applyFlashToCapture(flash) }
+    fun setFocusMode(mode: FocusMode) { updateState { copy(focusMode=mode) }; applyFocusMode(mode) }
+    fun setWhiteBalance(wb: WhiteBalance) { updateState { copy(whiteBalance=wb) }; applyWhiteBalance(wb) }
+    fun setZoom(zoom: Float) { val st=_state.value ?: return; val z=zoom.coerceIn(st.minZoom, st.maxZoom); camera?.cameraControl?.setZoomRatio(z); updateState { copy(zoom=z) } }
+    fun setIso(iso: Int?) = updateState { copy(iso=iso) }
+    fun setShutterSpeed(ns: Long?) = updateState { copy(shutterSpeed=ns) }
+    fun setExposureCompensation(steps: Int) { camera?.cameraControl?.setExposureCompensationIndex(steps); updateState { copy(exposureCompensation=steps) } }
+    fun setHdrEnabled(enabled: Boolean) = updateState { copy(hdrEnabled=enabled) }
+    fun setNightMode(enabled: Boolean) = updateState { copy(nightModeEnabled=enabled) }
+    fun setAspectRatio(ratio: Int) = updateState { copy(aspectRatio=ratio) }
+    fun setVideoQuality(quality: Quality) = updateState { copy(videoQuality=quality) }
+    fun setUseAv1(use: Boolean) = updateState { copy(useAv1=use) }
+    fun setFrameRate(fps: Int) = updateState { copy(frameRate=fps) }
+    fun setWebpQuality(q: Int) = updateState { copy(webpQuality=q) }
+    fun setLosslessWebP(lossless: Boolean) = updateState { copy(losslessWebP=lossless) }
+    fun setFullscreenBrightness(enabled: Boolean) = updateState { copy(fullscreenBrightness=enabled) }
 
-    fun setMode(mode: CameraMode) = updateState { copy(mode = mode) }
+    fun onCameraInitialized(cam: Camera) { camera=cam; val z=cam.cameraInfo.zoomState.value; updateState { copy(minZoom=z?.minZoomRatio ?: 1f, maxZoom=z?.maxZoomRatio ?: 1f, zoom=z?.zoomRatio ?: 1f, exposureCompensationRange=cam.cameraInfo.exposureState.exposureCompensationRange) }; applyFocusMode(_state.value?.focusMode ?: FocusMode.CONTINUOUS); _onCameraReady?.invoke() }
 
-    fun flipCamera() = updateState { copy(isFrontCamera = !isFrontCamera) }
-
-    fun setFlashMode(flash: FlashMode) {
-        updateState { copy(flashMode = flash) }
-        applyFlashToCapture(flash)
-    }
-
-    fun setFocusMode(mode: FocusMode) = updateState { copy(focusMode = mode) }
-
-    fun setWhiteBalance(wb: WhiteBalance) {
-        updateState { copy(whiteBalance = wb) }
-        applyWhiteBalance(wb)
-    }
-
-    fun setZoom(zoom: Float) {
-        val st = _state.value ?: return
-        val clamped = zoom.coerceIn(st.minZoom, st.maxZoom)
-        camera?.cameraControl?.setZoomRatio(clamped)
-        updateState { copy(zoom = clamped) }
-    }
-
-    fun setIso(iso: Int?) = updateState { copy(iso = iso) }
-
-    fun setShutterSpeed(ns: Long?) = updateState { copy(shutterSpeed = ns) }
-
-    fun setExposureCompensation(steps: Int) {
-        camera?.cameraControl?.setExposureCompensationIndex(steps)
-        updateState { copy(exposureCompensation = steps) }
-    }
-
-    fun setHdrEnabled(enabled: Boolean) = updateState { copy(hdrEnabled = enabled) }
-
-    fun setNightMode(enabled: Boolean) = updateState { copy(nightModeEnabled = enabled) }
-
-    fun setAspectRatio(ratio: Int) = updateState { copy(aspectRatio = ratio) }
-
-    fun setVideoQuality(quality: Quality) = updateState { copy(videoQuality = quality) }
-
-    fun setUseAv1(use: Boolean) = updateState { copy(useAv1 = use) }
-    fun setFrameRate(fps: Int)   = updateState { copy(frameRate = fps) }
-
-    fun setWebpQuality(q: Int) = updateState { copy(webpQuality = q) }
-
-    fun setLosslessWebP(lossless: Boolean) = updateState { copy(losslessWebP = lossless) }
-
-    fun setFullscreenBrightness(enabled: Boolean) = updateState { copy(fullscreenBrightness = enabled) }
-
-    fun onCameraInitialized(cam: Camera) {
-        camera = cam
-        val zoomState = cam.cameraInfo.zoomState.value
-        updateState {
-            copy(
-                minZoom = zoomState?.minZoomRatio ?: 1f,
-                maxZoom = zoomState?.maxZoomRatio ?: 1f,
-                zoom = zoomState?.zoomRatio ?: 1f,
-                exposureCompensationRange = cam.cameraInfo.exposureState.exposureCompensationRange
-            )
-        }
-        _onCameraReady?.invoke()
-    }
-
-    // ─── Flash ─────────────────────────────────────────────────────────
-
-    private fun applyFlashToCapture(flash: FlashMode) {
-        imageCapture?.flashMode = when (flash) {
-            FlashMode.OFF   -> ImageCapture.FLASH_MODE_OFF
-            FlashMode.ON    -> ImageCapture.FLASH_MODE_ON
-            FlashMode.AUTO  -> ImageCapture.FLASH_MODE_AUTO
-            FlashMode.TORCH -> ImageCapture.FLASH_MODE_OFF // torch handled via CameraControl
-        }
-        if (flash == FlashMode.TORCH) {
-            camera?.cameraControl?.enableTorch(true)
-        } else {
-            camera?.cameraControl?.enableTorch(false)
-        }
-    }
-
-    // ─── White Balance ──────────────────────────────────────────────────────
-
-    private fun applyWhiteBalance(wb: WhiteBalance) {
-        val cam = camera ?: return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return
+    private fun applyFocusMode(mode: FocusMode) {
+        val cam=camera ?: return
         try {
-            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
-            val awbMode = when (wb) {
-                WhiteBalance.AUTO        -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_AUTO
-                WhiteBalance.DAYLIGHT    -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT
-                WhiteBalance.CLOUDY      -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
-                WhiteBalance.SHADE       -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_SHADE
-                WhiteBalance.TUNGSTEN    -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_INCANDESCENT
-                WhiteBalance.FLUORESCENT -> android.hardware.camera2.CameraMetadata.CONTROL_AWB_MODE_FLUORESCENT
+            val af = when (mode) {
+                FocusMode.MANUAL -> android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_OFF
+                FocusMode.AUTO, FocusMode.MACRO -> android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_AUTO
+                FocusMode.CONTINUOUS -> android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
             }
-            val options = CaptureRequestOptions.Builder()
-                .setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, awbMode
-                )
-                .build()
-            camera2Control.captureRequestOptions = options
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not set white balance: ${e.message}")
-        }
+            Camera2CameraControl.from(cam.cameraControl).captureRequestOptions = CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE, af).build()
+        } catch (e: Exception) { Log.w(TAG, "Could not set focus mode: ${e.message}") }
     }
 
-    // ─── Manual Exposure (ISO + Shutter) ─────────────────────────────────────
-
-    fun applyManualExposure() {
-        val cam = camera ?: return
-        val st = _state.value ?: return
-        if (st.iso == null && st.shutterSpeed == null) return
+    /** Focus the center before opening the encoder surface. */
+    private fun preFocusThen(start: () -> Unit) {
+        val cam=camera
+        val mode=_state.value?.focusMode ?: FocusMode.CONTINUOUS
+        if (cam == null || mode == FocusMode.MANUAL) { start(); return }
+        val point=SurfaceOrientedMeteringPointFactory(1f, 1f).createPoint(.5f, .5f)
+        val action=FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+            .setAutoCancelDuration(3, TimeUnit.SECONDS).build()
         try {
-            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
-            val builder = CaptureRequestOptions.Builder()
-            st.iso?.let {
-                builder.setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY, it
-                )
-                builder.setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE,
-                    android.hardware.camera2.CameraMetadata.CONTROL_AE_MODE_OFF
-                )
-            }
-            st.shutterSpeed?.let {
-                builder.setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.SENSOR_EXPOSURE_TIME, it
-                )
-            }
-            camera2Control.captureRequestOptions = builder.build()
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not apply manual exposure: ${e.message}")
-        }
+            val future=cam.cameraControl.startFocusAndMetering(action)
+            future.addListener({
+                try { future.get() } catch (_: Exception) { Log.w(TAG, "Pre-focus did not complete") }
+                start()
+            }, ContextCompat.getMainExecutor(getApplication()))
+        } catch (e: Exception) { Log.w(TAG, "Could not pre-focus: ${e.message}"); start() }
     }
 
-    fun resetManualExposure() {
-        val cam = camera ?: return
-        try {
-            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
-            val options = CaptureRequestOptions.Builder()
-                .setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE,
-                    android.hardware.camera2.CameraMetadata.CONTROL_AE_MODE_ON
-                )
-                .build()
-            camera2Control.captureRequestOptions = options
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not reset exposure: ${e.message}")
-        }
-    }
+    private fun applyFlashToCapture(flash: FlashMode) { imageCapture?.flashMode=when(flash) { FlashMode.OFF->ImageCapture.FLASH_MODE_OFF; FlashMode.ON->ImageCapture.FLASH_MODE_ON; FlashMode.AUTO,FlashMode.TORCH->ImageCapture.FLASH_MODE_AUTO }; if(flash==FlashMode.TORCH) camera?.cameraControl?.enableTorch(true) else camera?.cameraControl?.enableTorch(false) }
+    private fun applyWhiteBalance(wb: WhiteBalance) { val cam=camera ?: return; try { val m=when(wb) { WhiteBalance.AUTO->1; WhiteBalance.DAYLIGHT->5; WhiteBalance.CLOUDY->6; WhiteBalance.SHADE->8; WhiteBalance.TUNGSTEN->2; WhiteBalance.FLUORESCENT->3 }; Camera2CameraControl.from(cam.cameraControl).captureRequestOptions=CaptureRequestOptions.Builder().setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE,m).build() } catch(e:Exception) { Log.w(TAG,"Could not set white balance: ${e.message}") } }
 
-    // ─── Focus ─────────────────────────────────────────────────────────
-
-    fun tapToFocus(meteringPoint: MeteringPoint) {
-        val action = FocusMeteringAction.Builder(meteringPoint)
-            .addPoint(meteringPoint, FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AWB)
-            .build()
-        camera?.cameraControl?.startFocusAndMetering(action)
-    }
-
-    fun cancelFocus() {
-        camera?.cameraControl?.cancelFocusAndMetering()
-    }
-
-    // ─── Photo Capture ──────────────────────────────────────────────────────
-
-    fun takePhoto(context: Context, onDone: (Boolean, String?) -> Unit) {
-        val ic = imageCapture ?: run { onDone(false, "Camera not ready"); return }
-        val st = _state.value ?: CameraState()
-
-        updateState { copy(captureStatus = "Capturing…") }
-
-        ic.takePicture(cameraExecutor, object : ImageCapture.OnImageCapturedCallback() {
-            override fun onCaptureSuccess(image: ImageProxy) {
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        val saved = WebPImageSaver.save(
-                            context = context,
-                            image = image,
-                            quality = st.webpQuality,
-                            lossless = st.losslessWebP
-                        )
-                        image.close()
-                        withContext(Dispatchers.Main) {
-                            updateState { copy(captureStatus = null) }
-                            onDone(saved != null, saved)
-                        }
-                    } catch (e: Exception) {
-                        image.close()
-                        Log.e(TAG, "WebP save failed", e)
-                        withContext(Dispatchers.Main) {
-                            updateState { copy(captureStatus = null) }
-                            onDone(false, null)
-                        }
-                    }
-                }
-            }
-
-            override fun onError(exception: ImageCaptureException) {
-                Log.e(TAG, "Capture error", exception)
-                viewModelScope.launch(Dispatchers.Main) {
-                    updateState { copy(captureStatus = null) }
-                    onDone(false, null)
-                }
-            }
-        })
-    }
-
-    // ─── Video Recording ────────────────────────────────────────────────────
+    fun tapToFocus(meteringPoint: MeteringPoint) { camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(meteringPoint).addPoint(meteringPoint, FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AWB).build()) }
+    fun cancelFocus() { camera?.cameraControl?.cancelFocusAndMetering() }
 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
     fun startRecording(context: Context, onEvent: (VideoRecordEvent) -> Unit) {
-        val st = _state.value ?: CameraState()
-
-        // Acquire wake lock to keep screen on during recording
-        if (wakeLock == null) {
-            val powerManager = context.getSystemService<PowerManager>()
-            wakeLock = powerManager?.newWakeLock(
-                PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,
-                "BoeroCamera::recording"
-            )?.apply { acquire() }
-            Log.i(TAG, "Wake lock acquired for recording")
-        }
-
-        // Set full brightness if enabled
-        if (st.fullscreenBrightness) {
-            setFullBrightness(context)
-        }
-
-        if (st.useAv1 && st.av1Available && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startAv1Recording(context)
-        } else {
-            startCameraXRecording(context, onEvent)
-        }
+        val st=_state.value ?: CameraState()
+        if(wakeLock==null) { val pm=context.getSystemService<PowerManager>(); wakeLock=pm?.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,"BoeroCamera::recording")?.apply { acquire() } }
+        if(st.fullscreenBrightness) setFullBrightness(context)
+        // Do not connect the encoder until AF has completed. Otherwise the first
+        // encoded frames are the same out-of-focus frames seen in the preview.
+        preFocusThen { if(st.useAv1 && st.av1Available && Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q) startAv1Recording(context) else startCameraXRecording(context,onEvent) }
     }
 
-    private fun setFullBrightness(context: Context) {
-        try {
-            if (windowManager == null) {
-                windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            }
-            val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
-            val window = activity.window ?: return
-            val params = window.attributes
-            originalBrightness = params.screenBrightness
-            params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
-            window.attributes = params
-            Log.i(TAG, "Full brightness set for recording")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not set full brightness: ${e.message}")
-        }
-    }
-
-    private fun restoreBrightness(context: Context) {
-        try {
-            val activity = (context as? androidx.appcompat.app.AppCompatActivity) ?: return
-            val window = activity.window ?: return
-            val params = window.attributes
-            if (originalBrightness >= 0f) {
-                params.screenBrightness = originalBrightness
-            } else {
-                // originalBrightness == -1f means system default — clear the per-window override
-                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-            }
-            window.attributes = params
-            originalBrightness = -1f
-            Log.i(TAG, "Brightness restored after recording")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not restore brightness: ${e.message}")
-        }
-    }
-
-    // ─── AV1 path (MediaCodec+MediaMuxer → WebM) ────────────────────────────
+    private fun setFullBrightness(context: Context) { try { if(windowManager==null) windowManager=context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager; val a=context as? androidx.appcompat.app.AppCompatActivity ?: return; val p=a.window.attributes; originalBrightness=p.screenBrightness; p.screenBrightness=WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL; a.window.attributes=p } catch(e:Exception) { Log.w(TAG,"Could not set full brightness: ${e.message}") } }
+    private fun restoreBrightness(context: Context) { try { val a=context as? androidx.appcompat.app.AppCompatActivity ?: return; val p=a.window.attributes; p.screenBrightness=if(originalBrightness>=0f) originalBrightness else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE; a.window.attributes=p; originalBrightness=-1f } catch(e:Exception) { Log.w(TAG,"Could not restore brightness: ${e.message}") } }
 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
-    private fun startAv1Recording(context: Context) {
-        val st = _state.value ?: CameraState()
-        val (w, h) = qualityToDimensions(st.videoQuality)
-
-        // Read bitrate pref (default 8 Mbps)
-        val prefs = context.getSharedPreferences(
-            com.boerocamera.app.ui.SettingsActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-        val bitrateMbps = prefs.getInt(com.boerocamera.app.ui.SettingsActivity.KEY_AV1_BITRATE, 5)
-        val videoBitrate = bitrateMbps * 1_000_000
-
-        val videoPath = prefs.getString(com.boerocamera.app.ui.SettingsActivity.KEY_STORAGE_PATH + "_video",
-                com.boerocamera.app.ui.SettingsActivity.DEFAULT_VIDEO_PATH)!!
-            val session = Av1VideoHelper.startSession(
-            context, w, h,
-            videoBitrate    = videoBitrate,
-            frameRate       = st.frameRate,
-            rotationDegrees = av1Rotation,
-            savePath        = videoPath) ?: run {
-            Log.e(TAG, "AV1 session failed to start")
-            updateState { copy(captureStatus = "AV1 init failed") }
-            return
-        }
-        av1Session = session
-
-        // Wire the codec surface to the SECOND Preview use case (av1EncoderPreview),
-        // which is bound to the camera alongside the viewfinder Preview in bindCamera().
-        // This keeps the viewfinder running independently during recording.
-        av1EncoderPreview?.setSurfaceProvider { request ->
-            request.provideSurface(
-                session.inputSurface,
-                ContextCompat.getMainExecutor(context)
-            ) { result ->
-                Log.i(TAG, "AV1 codec surface result: ${result.resultCode}")
-            }
-        }
-
-        timerJob?.cancel()
-        timerJob = viewModelScope.launch {
-            var secs = 0L
-            while (true) {
-                kotlinx.coroutines.delay(1000)
-                secs++
-                updateState { copy(recordingDuration = secs) }
-            }
-        }
-        updateState { copy(isRecording = true, recordingDuration = 0L, captureStatus = null) }
-        Log.i(TAG, "AV1 recording started (${w}x${h} @ ${bitrateMbps}Mbps, rotation=${av1Rotation}°)")
-    }
-
-    private fun qualityToDimensions(quality: Quality): Pair<Int, Int> = when (quality) {
-        Quality.SD  -> Pair(640, 480)
-        Quality.HD  -> Pair(1280, 720)
-        Quality.UHD -> Pair(3840, 2160)
-        else        -> Pair(1920, 1080)
-    }
-
-    private fun stopAv1Recording(context: Context) {
-        timerJob?.cancel()
-        timerJob = null
-        av1Session?.stop(context)
-        av1Session = null
-        av1Preview = null
-        av1EncoderPreview = null
-        updateState { copy(isRecording = false, recordingDuration = 0L) }
-        restoreBrightness(context)
-        Log.i(TAG, "AV1 recording stopped")
-    }
-
-    // ─── CameraX path (H364/HEVC → MP4) ──────────────��───────────────────────
+    private fun startAv1Recording(context: Context) { val st=_state.value ?: return; val (w,h)=qualityToDimensions(st.videoQuality); val prefs=context.getSharedPreferences(com.boerocamera.app.ui.SettingsActivity.PREFS_NAME,Context.MODE_PRIVATE); val bitrate=prefs.getInt(com.boerocamera.app.ui.SettingsActivity.KEY_AV1_BITRATE,5)*1_000_000; val path=prefs.getString(com.boerocamera.app.ui.SettingsActivity.KEY_STORAGE_PATH+"_video",com.boerocamera.app.ui.SettingsActivity.DEFAULT_VIDEO_PATH)!!; val session=Av1VideoHelper.startSession(context,w,h,bitrate,st.frameRate,av1Rotation,path) ?: run { updateState { copy(captureStatus="AV1 init failed") }; return }; av1Session=session; av1EncoderPreview?.setSurfaceProvider { request -> request.provideSurface(session.inputSurface,ContextCompat.getMainExecutor(context)) { Log.i(TAG,"AV1 codec surface result: ${it.resultCode}") } }; timerJob?.cancel(); timerJob=viewModelScope.launch { var s=0L; while(true) { kotlinx.coroutines.delay(1000); updateState { copy(recordingDuration=++s) } } }; updateState { copy(isRecording=true,recordingDuration=0L,captureStatus=null) } }
+    private fun qualityToDimensions(q: Quality)=when(q) { Quality.SD->Pair(640,480); Quality.HD->Pair(1280,720); Quality.UHD->Pair(3840,2160); else->Pair(1920,1080) }
+    private fun stopAv1Recording(context: Context) { timerJob?.cancel(); timerJob=null; av1Session?.stop(context); av1Session=null; av1Preview=null; av1EncoderPreview=null; updateState { copy(isRecording=false,recordingDuration=0L) }; restoreBrightness(context) }
 
     @androidx.annotation.RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
-    private fun startCameraXRecording(context: Context, onEvent: (VideoRecordEvent) -> Unit) {
-        val vc = videoCapture ?: run {
-            Log.e(TAG, "videoCapture is null — camera not bound in VIDEO mode?")
-            return
-        }
-        val st = _state.value ?: CameraState()
-
-        val prefs = context.getSharedPreferences(
-            com.boerocamera.app.ui.SettingsActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-        val fileName = "VID_${System.currentTimeMillis()}"
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Video.Media.RELATIVE_PATH,
-                    prefs.getString(com.boerocamera.app.ui.SettingsActivity.KEY_STORAGE_PATH + "_video",
-                        com.boerocamera.app.ui.SettingsActivity.DEFAULT_VIDEO_PATH)!!)
-            }
-        }
-        val mediaStoreOutput = MediaStoreOutputOptions.Builder(
-            context.contentResolver,
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        ).setContentValues(contentValues).build()
-
-        activeRecording = vc.output
-            .prepareRecording(context, mediaStoreOutput)
-            .withAudioEnabled()
-            .start(ContextCompat.getMainExecutor(context)) { event ->
-                when (event) {
-                    is VideoRecordEvent.Start    -> updateState { copy(isRecording = true, recordingDuration = 0L) }
-                    is VideoRecordEvent.Status   -> updateState { copy(recordingDuration = event.recordingStats.recordedDurationNanos / 1_000_000_000L) }
-                    is VideoRecordEvent.Finalize -> {
-                        updateState { copy(isRecording = false, recordingDuration = 0L) }
-                        restoreBrightness(context)
-                    }
-                    else -> {}
-                }
-                onEvent(event)
-            }
-    }
-
-    fun stopRecording(context: Context? = null) {
-        // Release wake lock when recording stops
-        wakeLock?.release()
-        wakeLock = null
-        Log.i(TAG, "Wake lock released")
-
-        if (av1Session != null && context != null) {
-            stopAv1Recording(context)
-        } else {
-            activeRecording?.stop()
-            activeRecording = null
-            if (context != null) {
-                restoreBrightness(context)
-            }
-        }
-    }
-
-    fun pauseRecording() {
-        activeRecording?.pause()
-        // MediaCodec-based session doesn't support pause; stop/restart would be needed
-    }
-
-    fun resumeRecording() {
-        activeRecording?.resume()
-    }
-
-    // ─── Video Quality Builder (CameraX path only) ───────────────────────────
-
-    fun buildRecorder(context: Context): Recorder {
-        val st = _state.value ?: CameraState()
-        return Recorder.Builder()
-            .setExecutor(cameraExecutor)
-            .setQualitySelector(QualitySelector.from(
-                st.videoQuality,
-                FallbackStrategy.higherQualityOrLowerThan(st.videoQuality)
-            ))
-            .build()
-    }
-
-    /**
-     * Returns true if the current config will use the AV1/MediaRecorder path.
-     * MainActivity uses this to decide whether to bind VideoCapture or not.
-     */
-    fun isAv1Mode(): Boolean {
-        val st = _state.value ?: return false
-        return st.useAv1 && st.av1Available && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        cameraExecutor.shutdown()
-        // Ensure wake lock is released if app is closed while recording
-        wakeLock?.release()
-        wakeLock = null
-    }
+    private fun startCameraXRecording(context: Context,onEvent:(VideoRecordEvent)->Unit) { val vc=videoCapture ?: return; val prefs=context.getSharedPreferences(com.boerocamera.app.ui.SettingsActivity.PREFS_NAME,Context.MODE_PRIVATE); val values=ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME,"VID_${System.currentTimeMillis()}"); put(MediaStore.MediaColumns.MIME_TYPE,"video/mp4"); if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q) put(MediaStore.Video.Media.RELATIVE_PATH,prefs.getString(com.boerocamera.app.ui.SettingsActivity.KEY_STORAGE_PATH+"_video",com.boerocamera.app.ui.SettingsActivity.DEFAULT_VIDEO_PATH)!!) }; val output=MediaStoreOutputOptions.Builder(context.contentResolver,MediaStore.Video.Media.EXTERNAL_CONTENT_URI).setContentValues(values).build(); activeRecording=vc.output.prepareRecording(context,output).withAudioEnabled().start(ContextCompat.getMainExecutor(context)) { event -> when(event) { is VideoRecordEvent.Start->updateState { copy(isRecording=true,recordingDuration=0L) }; is VideoRecordEvent.Status->updateState { copy(recordingDuration=event.recordingStats.recordedDurationNanos/1_000_000_000L) }; is VideoRecordEvent.Finalize->{ updateState { copy(isRecording=false,recordingDuration=0L) }; restoreBrightness(context) }; else->{ } }; onEvent(event) } }
+    fun stopRecording(context: Context?=null) { wakeLock?.release(); wakeLock=null; if(av1Session!=null && context!=null) stopAv1Recording(context) else { activeRecording?.stop(); activeRecording=null; if(context!=null) restoreBrightness(context) } }
+    fun pauseRecording() { activeRecording?.pause() }
+    fun resumeRecording() { activeRecording?.resume() }
+    fun buildRecorder(context: Context): Recorder { val st=_state.value ?: CameraState(); return Recorder.Builder().setExecutor(cameraExecutor).setQualitySelector(QualitySelector.from(st.videoQuality,FallbackStrategy.higherQualityOrLowerThan(st.videoQuality))).build() }
+    fun isAv1Mode(): Boolean { val st=_state.value ?: return false; return st.useAv1&&st.av1Available&&Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q }
+    override fun onCleared() { super.onCleared(); cameraExecutor.shutdown(); wakeLock?.release(); wakeLock=null }
 }
